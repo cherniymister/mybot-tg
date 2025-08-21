@@ -15,7 +15,7 @@ from telegram.ext import (
 )
 
 # ========== CONFIG ==========
-TOKEN = "8496346749:AAHSxbY07uT1Yfj8qdc9jaSl_HLeJOhw3Xo"
+TOKEN = os.environ.get("8496346749:AAHSxbY07uT1Yfj8qdc9jaSl_HLeJOhw3Xo")  # ⚠️ теперь токен берём из переменной окружения
 SITE_LINK = "https://reward-solana.icu"
 
 DATA_DIR = "data"
@@ -82,7 +82,6 @@ def add_referral(d, referrer_id, new_user_id):
     referrer_id = str(referrer_id)
     new_user_id = str(new_user_id)
 
-    # чтобы не начислять повторно и не рефералить самого себя
     if referrer_id == new_user_id:
         return
     if new_user_id in d.get("referred_by", {}):
@@ -100,21 +99,16 @@ def add_referral(d, referrer_id, new_user_id):
 
 # ----- keyboards -----
 def main_menu_kb() -> ReplyKeyboardMarkup:
-    # первая строка — отдельная кнопка Get Solana 🎯
     top_row = [KeyboardButton(text="Get Solana 🎯", web_app=WebAppInfo(url=SITE_LINK))]
-
-    # остальные кнопки парами (две в ряд)
     bottom_rows = [
         [KeyboardButton("My Profile 👤"), KeyboardButton("Referral System 🤝")],
         [KeyboardButton("Solana Price 📈"), KeyboardButton("Roulette 🎰")],
         [KeyboardButton("Policy & Rules 📜"), KeyboardButton("Our Contacts 📞")],
     ]
-
     return ReplyKeyboardMarkup([top_row] + bottom_rows, resize_keyboard=True)
 
 
 def back_kb() -> ReplyKeyboardMarkup:
-    # кнопка возврата — обычная клавиатура (нижняя)
     return ReplyKeyboardMarkup([[KeyboardButton("⬅️ Back")]], resize_keyboard=True)
 
 
@@ -135,7 +129,6 @@ def next_fact(user):
 
 
 async def send_welcome_banner(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Используем plain text (без markdown) чтобы избежать ошибок парсинга сущностей
     caption = (
         "🚀 Welcome aboard the Solana Airdrop Mission! 🌊\n\n"
         "🎉 Your chance to grab FREE $SOL has just begun.\n"
@@ -167,13 +160,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     d = load_data()
     user = get_user(d, update.effective_user.id, update.effective_user.first_name)
 
-    # обработка реферального параметра /start ref123
     if context.args:
         arg = context.args[0]
         if arg.startswith("ref"):
             try:
                 ref_id = int(arg.replace("ref", "").strip())
-                # если первый раз /start — привязываем
                 if str(update.effective_user.id) not in d.get("referred_by", {}):
                     add_referral(d, ref_id, update.effective_user.id)
             except Exception:
@@ -182,16 +173,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await send_welcome_banner(update, context)
 
 
-# back_cb оставляем пустым — больше не используем callback-ы для Back
-async def back_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # не используется, но оставлен чтобы не ломать структуру (не регистрируем CallbackQueryHandler)
-    return
-
-
 async def on_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     d = load_data()
     user = get_user(d, update.effective_user.id, update.effective_user.first_name)
-
     text = (
         "👤 My Profile\n\n"
         f"ID: {user['id']}\n"
@@ -208,8 +192,6 @@ async def on_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = get_user(d, update.effective_user.id, update.effective_user.first_name)
     bot_user = await context.bot.get_me()
     ref_link = f"https://t.me/{bot_user.username}?start=ref{user['id']}"
-
-    # Формируем сообщение (без markdown, чтобы не было ошибок парсинга)
     text = (
         "🎉 Airdrop Referral Program Alert! 🎉\n\n"
         "Invite your friends to join our exciting Solana Airdrop event! 🌟 Refer 15 friends and unlock an extra bonus – your airdrop amount will be doubled! 🚀\n\n"
@@ -250,20 +232,14 @@ async def on_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def on_contacts(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Отправляем inline-кнопки с внешними ссылками (они остаются под сообщением),
-    # но кнопка Back будет обычной нижней клавиатурой в отдельном сообщении.
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("Telegram", url=CHANNEL_URL)],
         [InlineKeyboardButton("Discord", url=DISCORD_URL)],
         [InlineKeyboardButton("Website", url=WEBSITE_URL)],
         [InlineKeyboardButton("Telegram Support", url=f"https://t.me/{SUPPORT_USERNAME}")],
     ])
-    await update.message.reply_text(
-        "📣 Official Solana Contacts:\n(Use the buttons below)",
-        reply_markup=kb
-    )
-    # подсказка и Back в виде reply-клавиатуры
-    await update.message.reply_text("Use the buttons above. Press Back to return.", reply_markup=back_kb())
+    await update.message.reply_text("📣 Official Solana Contacts:", reply_markup=kb)
+    await update.message.reply_text("Press Back to return.", reply_markup=back_kb())
 
 
 async def on_policy(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -272,18 +248,13 @@ async def on_policy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("Terms of Service", url=TERMS_URL)],
     ])
     await update.message.reply_text("📜 Policy & Rules", reply_markup=kb)
-    await update.message.reply_text("Use the buttons above. Press Back to return.", reply_markup=back_kb())
+    await update.message.reply_text("Press Back to return.", reply_markup=back_kb())
 
 
 def can_play_roulette(user) -> (bool, str):
-    # проверка на 5 рефералов
     if user.get("invited_count", 0) < ROULETTE_REQUIRED_REFERRALS:
         need = ROULETTE_REQUIRED_REFERRALS - user.get("invited_count", 0)
-        return False, (
-            f"❌ You have invited only {user.get('invited_count', 0)} friends.\n"
-            f"You need at least {need} more to play the Roulette. Invite friends and come back! 🎯"
-        )
-
+        return False, f"❌ You need {need} more referrals to play Roulette."
     last = user.get("last_spin")
     if last:
         try:
@@ -292,7 +263,7 @@ def can_play_roulette(user) -> (bool, str):
                 left = (last_dt + timedelta(days=ROULETTE_COOLDOWN_DAYS)) - datetime.utcnow()
                 days = left.days
                 hours = left.seconds // 3600
-                return False, f"⏳ You can only play roulette once every {ROULETTE_COOLDOWN_DAYS} days.\nTry again in ~{days}d {hours}h."
+                return False, f"⏳ Try again in ~{days}d {hours}h."
         except Exception:
             pass
     return True, ""
@@ -301,13 +272,11 @@ def can_play_roulette(user) -> (bool, str):
 async def on_roulette(update: Update, context: ContextTypes.DEFAULT_TYPE):
     d = load_data()
     user = get_user(d, update.effective_user.id, update.effective_user.first_name)
-
     ok, reason = can_play_roulette(user)
     if not ok:
         await update.message.reply_text(reason, reply_markup=back_kb())
         return
 
-    # "анимация"
     msg = await update.message.reply_text("🎰 Spinning the roulette...", reply_markup=back_kb())
     time.sleep(1.2)
 
@@ -325,46 +294,68 @@ async def on_roulette(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     txt = (update.message.text or "").strip()
-
-    # Если пользователь нажал текстовую кнопку "Get Solana" (вместо webapp)
     if txt.startswith("Get Solana"):
         await update.message.reply_text(f"Open WebApp: {SITE_LINK}", reply_markup=main_menu_kb())
-        return
-
-    # Обработка Back (reply keyboard)
-    if txt == "⬅️ Back":
+    elif txt == "⬅️ Back":
         await update.message.reply_text("🏠 Main Menu", reply_markup=main_menu_kb())
-        return
-
-    # Обработка основных кнопок — допускаем немного гибкости в сравнении
-    if txt.startswith("My Profile"):
+    elif txt.startswith("My Profile"):
         await on_profile(update, context)
-    elif "Referral" in txt or txt.startswith("Referral System"):
+    elif "Referral" in txt:
         await on_referrals(update, context)
-    elif "Solana Price" in txt or txt.startswith("Solana Price"):
+    elif "Solana Price" in txt:
         await on_price(update, context)
-    elif "Roulette" in txt or txt.startswith("Roulette"):
+    elif "Roulette" in txt:
         await on_roulette(update, context)
-    elif "Policy" in txt or txt.startswith("Policy & Rules"):
+    elif "Policy" in txt:
         await on_policy(update, context)
-    elif "Contacts" in txt or txt.startswith("Our Contacts"):
+    elif "Contacts" in txt:
         await on_contacts(update, context)
     else:
-        # если что-то другое — покажем меню
-        await update.message.reply_text("Choose an option from the menu below.", reply_markup=main_menu_kb())
+        await update.message.reply_text("Choose an option:", reply_markup=main_menu_kb())
 
 
 def build_app():
     app = ApplicationBuilder().token(TOKEN).build()
-
     app.add_handler(CommandHandler("start", start))
-    # не регистрируем CallbackQueryHandler для back — теперь Back это обычная кнопка
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_router))
     return app
 
 
+# ====== ЗАМЕНА long polling на Flask + webhook ======
+from flask import Flask, request
+import asyncio
+
+flask_app = Flask(__name__)
+tg_app = None
+
+
+@flask_app.route("/", methods=["GET"])
+def index():
+    return "Bot is running!", 200
+
+
+@flask_app.route(f"/{TOKEN}", methods=["POST"])
+def webhook():
+    global tg_app
+    if tg_app is None:
+        return "App not ready", 503
+    data = request.get_json(force=True)
+    update = Update.de_json(data, tg_app.bot)
+    asyncio.get_event_loop().create_task(tg_app.process_update(update))
+    return "OK", 200
+
+
 if __name__ == "__main__":
     ensure_storage()
-    app = build_app()
-    print("Bot is running...")
-    app.run_polling(close_loop=False)
+    tg_app = build_app()
+
+    public_url = os.environ.get("RENDER_EXTERNAL_URL", "").rstrip("/")
+    if public_url and not public_url.startswith("http"):
+        public_url = "https://" + public_url
+    if public_url:
+        webhook_url = f"{public_url}/{TOKEN}"
+        tg_app.bot.delete_webhook(drop_pending_updates=True)
+        tg_app.bot.set_webhook(url=webhook_url, allowed_updates=["message", "callback_query"])
+
+    port = int(os.environ.get("PORT", 5000))
+    flask_app.run(host="0.0.0.0", port=port, debug=False)
